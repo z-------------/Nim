@@ -280,6 +280,7 @@ type
     version*: int
     endLine*: uint16
     endCol*: int
+    sourceName*: string
 
   Suggestions* = seq[Suggest]
 

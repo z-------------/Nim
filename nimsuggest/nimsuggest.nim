@@ -76,6 +76,10 @@ type
     msg: string
     sev: Severity
   CachedMsgs = seq[CachedMsg]
+  IdentStyle = enum
+    Neutral
+    Camel
+    Snake
 
 var
   gPort = 6000.Port
@@ -95,7 +99,46 @@ proc executeNoHooksV3(cmd: IdeCmd, file: AbsoluteFile, dirtyfile: AbsoluteFile, 
 proc writelnToChannel(line: string) =
   results.send(Suggest(section: ideMsg, doc: line))
 
+func detectStyle(n: string): IdentStyle =
+  if n.contains(UppercaseLetters):
+    Camel
+  elif n.contains('_'):
+    Snake
+  else:
+    Neutral
+
+func applyStyleCamel(n: string): string =
+  var isFirst = true
+  for part in n.split('_'):
+    if part.len > 0:
+      if isFirst:
+        isFirst = false
+        result.add(part)
+      else:
+        result.add(part[0].toUpperAscii)
+        result.add(part[1..^1])
+
+func applyStyleSnake(n: string): string =
+  for i, c in n.pairs:
+    if c in UppercaseLetters and (i > 0 and n[i - 1] notin UppercaseLetters or i < n.high and n[i + 1] notin UppercaseLetters):
+      result.add('_')
+    result.add(c.toLowerAscii)
+
+func applyStyle(n: string; style: IdentStyle): string =
+  case style
+  of Neutral:
+    n
+  of Camel:
+    applyStyleCamel(n)
+  of Snake:
+    applyStyleSnake(n)
+
+proc formatSuggest(s: Suggest) =
+  let style = detectStyle(s.sourceName)
+  s.qualifiedPath[^1] = applyStyle(s.qualifiedPath[^1], style)
+
 proc sugResultHook(s: Suggest) =
+  formatSuggest(s)
   results.send(s)
 
 proc errorHook(conf: ConfigRef; info: TLineInfo; msg: string; sev: Severity) =
@@ -776,7 +819,7 @@ proc suggestResult(graph: ModuleGraph, sym: PSym, info: TLineInfo,
                 else:
                   ideUse
   let suggest = symToSuggest(graph, sym, isLocal=false, section,
-                             info, 100, PrefixMatch.None, false, 0,
+                             info, 100, PrefixMatch.None, false, 0, nil,
                              endLine = endLine, endCol = endCol)
   suggestResult(graph.config, suggest)
 

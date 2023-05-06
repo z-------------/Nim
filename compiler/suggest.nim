@@ -120,6 +120,7 @@ proc getTokenLenFromSource(conf: ConfigRef; ident: string; info: TLineInfo): int
 proc symToSuggest*(g: ModuleGraph; s: PSym, isLocal: bool, section: IdeCmd, info: TLineInfo;
                   quality: range[0..100]; prefix: PrefixMatch;
                   inTypeContext: bool; scope: int;
+                  source: PNode,
                   useSuppliedInfo = false,
                   endLine: uint16 = 0,
                   endCol = 0): Suggest =
@@ -131,6 +132,14 @@ proc symToSuggest*(g: ModuleGraph; s: PSym, isLocal: bool, section: IdeCmd, info
   result.contextFits = inTypeContext == (s.kind in {skType, skGenericParam})
   result.scope = scope
   result.name = addr s.name.s
+  if source != nil:
+    case source.kind
+    of nkSym:
+      result.sourceName = source.sym.name.s
+    of nkIdent:
+      result.sourceName = source.ident.s
+    else:
+      discard
   when defined(nimsuggest):
     result.globalUsages = s.allUsages.len
     var c = 0
@@ -296,15 +305,15 @@ proc suggestField(c: PContext, s: PSym; f: PNode; info: TLineInfo; outputs: var 
   var pm: PrefixMatch
   if filterSym(s, f, pm) and fieldVisible(c, s):
     outputs.add(symToSuggest(c.graph, s, isLocal=true, ideSug, info,
-                              s.getQuality, pm, c.inTypeContext > 0, 0))
+                              s.getQuality, pm, c.inTypeContext > 0, 0, f))
 
-template wholeSymTab(cond, section: untyped) {.dirty.} =
+template wholeSymTab(cond, section: untyped; source: PNode) {.dirty.} =
   for (item, scopeN, isLocal) in uniqueSyms(c):
     let it = item
     var pm: PrefixMatch
     if cond:
       outputs.add(symToSuggest(c.graph, it, isLocal = isLocal, section, info, getQuality(it),
-                                pm, c.inTypeContext > 0, scopeN))
+                                pm, c.inTypeContext > 0, scopeN, source))
 
 proc suggestSymList(c: PContext, list, f: PNode; info: TLineInfo, outputs: var Suggestions) =
   for i in 0..<list.len:
@@ -346,11 +355,11 @@ proc argsFit(c: PContext, candidate: PSym, n, nOrig: PNode): bool =
 proc suggestCall(c: PContext, n, nOrig: PNode, outputs: var Suggestions) =
   let info = n.info
   wholeSymTab(filterSym(it, nil, pm) and nameFits(c, it, n) and argsFit(c, it, n, nOrig),
-              ideCon)
+              ideCon, nil)
 
 proc suggestVar(c: PContext, n: PNode, outputs: var Suggestions) =
   let info = n.info
-  wholeSymTab(nameFits(c, it, n), ideCon)
+  wholeSymTab(nameFits(c, it, n), ideCon, nil)
 
 proc typeFits(c: PContext, s: PSym, firstArg: PType): bool {.inline.} =
   if s.typ != nil and s.typ.len > 1 and s.typ[1] != nil:
@@ -368,7 +377,7 @@ proc typeFits(c: PContext, s: PSym, firstArg: PType): bool {.inline.} =
 proc suggestOperations(c: PContext, n, f: PNode, typ: PType, outputs: var Suggestions) =
   assert typ != nil
   let info = n.info
-  wholeSymTab(filterSymNoOpr(it, f, pm) and typeFits(c, it, typ), ideSug)
+  wholeSymTab(filterSymNoOpr(it, f, pm) and typeFits(c, it, typ), ideSug, f)
 
 proc suggestEverything(c: PContext, n, f: PNode, outputs: var Suggestions) =
   # do not produce too many symbols:
@@ -376,7 +385,7 @@ proc suggestEverything(c: PContext, n, f: PNode, outputs: var Suggestions) =
     var pm: PrefixMatch
     if filterSym(it, f, pm):
       outputs.add(symToSuggest(c.graph, it, isLocal = isLocal, ideSug, n.info,
-                               it.getQuality, pm, c.inTypeContext > 0, scopeN))
+                               it.getQuality, pm, c.inTypeContext > 0, scopeN, f))
 
 proc suggestFieldAccess(c: PContext, n, field: PNode, outputs: var Suggestions) =
   # special code that deals with ``myObj.``. `n` is NOT the nkDotExpr-node, but
@@ -398,10 +407,10 @@ proc suggestFieldAccess(c: PContext, n, field: PNode, outputs: var Suggestions) 
             if filterSym(it, field, pm):
               outputs.add(symToSuggest(c.graph, it, isLocal=false, ideSug,
                                         n.info, it.getQuality, pm,
-                                        c.inTypeContext > 0, -100))
+                                        c.inTypeContext > 0, -100, field))
           outputs.add(symToSuggest(c.graph, m, isLocal=false, ideMod, n.info,
                                     100, PrefixMatch.None, c.inTypeContext > 0,
-                                    -99))
+                                    -99, field))
 
   if typ == nil:
     # a module symbol has no type for example:
@@ -412,13 +421,13 @@ proc suggestFieldAccess(c: PContext, n, field: PNode, outputs: var Suggestions) 
           if filterSym(it, field, pm):
             outputs.add(symToSuggest(c.graph, it, isLocal=false, ideSug,
                                       n.info, it.getQuality, pm,
-                                      c.inTypeContext > 0, -99))
+                                      c.inTypeContext > 0, -99, field))
       else:
         for it in allSyms(c.graph, n.sym):
           if filterSym(it, field, pm):
             outputs.add(symToSuggest(c.graph, it, isLocal=false, ideSug,
                                       n.info, it.getQuality, pm,
-                                      c.inTypeContext > 0, -99))
+                                      c.inTypeContext > 0, -99, field))
     else:
       # fallback:
       suggestEverything(c, n, field, outputs)
@@ -481,10 +490,10 @@ proc findUsages(g: ModuleGraph; info: TLineInfo; s: PSym; usageSym: var PSym) =
   if g.config.suggestVersion == 1:
     if usageSym == nil and isTracked(info, g.config.m.trackPos, s.name.s.len):
       usageSym = s
-      suggestResult(g.config, symToSuggest(g, s, isLocal=false, ideUse, info, 100, PrefixMatch.None, false, 0))
+      suggestResult(g.config, symToSuggest(g, s, isLocal=false, ideUse, info, 100, PrefixMatch.None, false, 0, nil))
     elif s == usageSym:
       if g.config.lastLineInfo != info:
-        suggestResult(g.config, symToSuggest(g, s, isLocal=false, ideUse, info, 100, PrefixMatch.None, false, 0))
+        suggestResult(g.config, symToSuggest(g, s, isLocal=false, ideUse, info, 100, PrefixMatch.None, false, 0, nil))
       g.config.lastLineInfo = info
 
 when defined(nimsuggest):
@@ -492,12 +501,12 @@ when defined(nimsuggest):
     #echo "usages ", s.allUsages.len
     for info in s.allUsages:
       let x = if info == s.info and info.col == s.info.col: ideDef else: ideUse
-      suggestResult(g.config, symToSuggest(g, s, isLocal=false, x, info, 100, PrefixMatch.None, false, 0))
+      suggestResult(g.config, symToSuggest(g, s, isLocal=false, x, info, 100, PrefixMatch.None, false, 0, nil))
 
 proc findDefinition(g: ModuleGraph; info: TLineInfo; s: PSym; usageSym: var PSym) =
   if s.isNil: return
   if isTracked(info, g.config.m.trackPos, s.name.s.len) or (s == usageSym and sfForward notin s.flags):
-    suggestResult(g.config, symToSuggest(g, s, isLocal=false, ideDef, info, 100, PrefixMatch.None, false, 0, useSuppliedInfo = s == usageSym))
+    suggestResult(g.config, symToSuggest(g, s, isLocal=false, ideDef, info, 100, PrefixMatch.None, false, 0, nil, useSuppliedInfo = s == usageSym))
     if sfForward notin s.flags and g.config.suggestVersion != 3:
       suggestQuit()
     else:
@@ -527,10 +536,10 @@ proc suggestSym*(g: ModuleGraph; info: TLineInfo; s: PSym; usageSym: var PSym; i
       findDefinition(g, info, s, usageSym)
     elif conf.ideCmd == ideDus and s != nil:
       if isTracked(info, conf.m.trackPos, s.name.s.len):
-        suggestResult(conf, symToSuggest(g, s, isLocal=false, ideDef, info, 100, PrefixMatch.None, false, 0))
+        suggestResult(conf, symToSuggest(g, s, isLocal=false, ideDef, info, 100, PrefixMatch.None, false, 0, nil))
       findUsages(g, info, s, usageSym)
     elif conf.ideCmd == ideHighlight and info.fileIndex == conf.m.trackPos.fileIndex:
-      suggestResult(conf, symToSuggest(g, s, isLocal=false, ideHighlight, info, 100, PrefixMatch.None, false, 0))
+      suggestResult(conf, symToSuggest(g, s, isLocal=false, ideHighlight, info, 100, PrefixMatch.None, false, 0, nil))
     elif conf.ideCmd == ideOutline and isDecl:
       # if a module is included then the info we have is inside the include and
       # we need to walk up the owners until we find the outer most module,
@@ -543,7 +552,7 @@ proc suggestSym*(g: ModuleGraph; info: TLineInfo; s: PSym; usageSym: var PSym; i
         parentModule = parentModule.owner
 
       if parentFileIndex == conf.m.trackPos.fileIndex:
-        suggestResult(conf, symToSuggest(g, s, isLocal=false, ideOutline, info, 100, PrefixMatch.None, false, 0))
+        suggestResult(conf, symToSuggest(g, s, isLocal=false, ideOutline, info, 100, PrefixMatch.None, false, 0, nil))
 
 proc warnAboutDeprecated(conf: ConfigRef; info: TLineInfo; s: PSym) =
   var pragmaNode: PNode
@@ -631,7 +640,7 @@ proc sugExpr(c: PContext, n: PNode, outputs: var Suggestions) =
     let
       prefix = if c.config.m.trackPosAttached: nil else: n
       info = n.info
-    wholeSymTab(filterSym(it, prefix, pm), ideSug)
+    wholeSymTab(filterSym(it, prefix, pm), ideSug, prefix)
   else:
     let prefix = if c.config.m.trackPosAttached: nil else: n
     suggestEverything(c, n, prefix, outputs)
@@ -695,7 +704,7 @@ proc suggestSentinel*(c: PContext) =
     if filterSymNoOpr(it, nil, pm):
       outputs.add(symToSuggest(c.graph, it, isLocal = isLocal, ideSug,
           newLineInfo(c.config.m.trackPos.fileIndex, 0, -1), it.getQuality,
-          PrefixMatch.None, false, scopeN))
+          PrefixMatch.None, false, scopeN, nil))
 
   dec(c.compilesContextId)
   produceOutput(outputs, c.config)
