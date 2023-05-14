@@ -115,6 +115,7 @@ proc lockLocations(a: PEffects; pragma: PNode) =
 
 proc guardGlobal(a: PEffects; n: PNode; guard: PSym) =
   # check whether the corresponding lock is held:
+  zecho "guardGlobal: locked = ", a.locked
   for L in a.locked:
     zecho "guardGlobal: checking L = ", L
     if L.kind == nkSym and L.sym == guard:
@@ -1467,6 +1468,10 @@ proc hasRealBody(s: PSym): bool =
   result = {sfForward, sfImportc} * s.flags == {}
 
 proc trackProc*(c: PContext; s: PSym, body: PNode) =
+  let zIsFoo = ($s).contains("foo")
+  if zIsFoo:
+    zecho "trackProc: s = ", s, ", body = ", body
+
   let g = c.graph
   when defined(nimsuggest):
     if g.config.expandDone():
@@ -1489,7 +1494,18 @@ proc trackProc*(c: PContext; s: PSym, body: PNode) =
     var res = s.ast[resultPos].sym # get result symbol
     t.scopes[res.id] = t.currentBlock
 
+  let guard = s.typ.guard
+  if guard != nil:
+    zecho "trackProc: adding guard to locked locations"
+    let guardNode = newNodeIT(nkSym, guard.info, guard.typ)
+    guardNode.sym = guard
+    t.locked.add(guardNode)
+
+  if zIsFoo:
+    zecho "trackProc: before calling track, t.locked = ", t.locked
   track(t, body)
+  if zIsFoo:
+    zecho "trackProc: after calling track, t.locked = ", t.locked
 
   if s.kind != skMacro:
     let params = s.typ.n
