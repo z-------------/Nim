@@ -116,7 +116,11 @@ proc lockLocations(a: PEffects; pragma: PNode) =
 proc guardGlobal(a: PEffects; n: PNode; guard: PSym) =
   # check whether the corresponding lock is held:
   for L in a.locked:
-    if L.kind == nkSym and L.sym == guard: return
+    zecho "guardGlobal: checking L = ", L
+    if L.kind == nkSym and L.sym == guard:
+      zecho "guardGlobal: ok, the corresponding lock is held"
+      return
+  zecho "guardGlobal: not ok!"
   # we allow accesses nevertheless in top level statements for
   # easier initialization:
   #if a.isTopLevel:
@@ -823,6 +827,10 @@ proc checkForSink(tracked: PEffects; n: PNode) =
     checkForSink(tracked.config, tracked.c.idgen, tracked.owner, n)
 
 proc trackCall(tracked: PEffects; n: PNode) =
+  let zIsFoo = n != nil and ($n).contains("foo")
+  if zIsFoo:
+    zecho "trackCall: tracked = ", tracked.locked, ", n = ", $n
+
   template gcsafeAndSideeffectCheck() =
     if notGcSafe(op) and not importedFromC(a):
       # and it's not a recursive call:
@@ -850,12 +858,20 @@ proc trackCall(tracked: PEffects; n: PNode) =
     # are indistinguishable from normal procs (both have tyProc type) and
     # we can detect them only by checking for attached nkEffectList.
     if op != nil and op.kind == tyProc and op.n[0].kind == nkEffectList:
+      # if zIsFoo:
+        # zecho "trackCall: this is where we would have checked lock levels?"
+        # zecho "trackCall: a.kind = ", a.kind
+      var guard: PSym = nil
       if a.kind == nkSym:
         if a.sym == tracked.owner: tracked.isRecursive = true
         # even for recursive calls we need to check the lock levels (!):
         if sfSideEffect in a.sym.flags: markSideEffect(tracked, a, n.info)
+        guard = a.sym.typ.guard
       else:
-        discard
+        zecho "trackCall: a.kind is not nkSym! n = ", n, ", a = ", a, ", op = ", op
+        guard = op.guard
+      if guard != nil:
+        guardGlobal(tracked, n, guard)
       var effectList = op.n[0]
       if a.kind == nkSym and a.sym.kind == skMethod:
         if {sfBase, sfThread} * a.sym.flags == {sfBase}:
@@ -1352,6 +1368,7 @@ proc checkRaisesSpec(g: ModuleGraph; emitWarnings: bool; spec, real: PNode, msg:
                 "'$1' cannot raise '$2'" % [renderTree(hintsArg), renderTree(spec[s])])
 
 proc checkMethodEffects*(g: ModuleGraph; disp, branch: PSym) =
+  ## XXX routine guard
   ## checks for consistent effects for multi methods.
   let actual = branch.typ.n[0]
   if actual.len != effectListLen: return

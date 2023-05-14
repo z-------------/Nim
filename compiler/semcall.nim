@@ -144,6 +144,7 @@ proc pickBestCandidate(c: PContext, headSymbol: PNode,
 
 
 proc effectProblem(f, a: PType; result: var string; c: PContext) =
+  ## XXX routine guard?
   if f.kind == tyProc and a.kind == tyProc:
     if tfThread in f.flags and tfThread notin a.flags:
       result.add "\n  This expression is not GC-safe. Annotate the " &

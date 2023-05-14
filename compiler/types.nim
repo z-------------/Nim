@@ -754,6 +754,9 @@ proc typeToString(typ: PType, prefer: TPreferedDesc = preferName): string =
       if tfThread in t.flags:
         addSep(prag)
         prag.add("gcsafe")
+      if t.guard != nil:
+        addSep(prag)
+        prag.add("guard: " & $t.guard)
       if prag.len != 0: result.add("{." & prag & ".}")
     of tyVarargs:
       result = typeToStr[t.kind] % typeToString(t[0])

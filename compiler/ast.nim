@@ -972,6 +972,7 @@ type
                               # -1 means that the size is unkwown
     align*: int16             # the type's alignment requirements
     paddingAtEnd*: int16      #
+    guard*: PSym
     loc*: TLoc
     typeInst*: PType          # for generic instantiations the tyGenericInst that led to this
                               # type.
