@@ -1829,8 +1829,6 @@ proc echo*(x: varargs[typed, `$`]) {.magic: "Echo", benign, sideEffect.}
   ## <manual.html#pragmas-nosideeffect-pragma>`_ you can use `debugEcho
   ## <#debugEcho,varargs[typed,]>`_ instead.
 
-proc zEcho*(x: varargs[typed, `$`]) {.magic: "Echo", noSideEffect, tags: [], raises: [].}
-
 proc debugEcho*(x: varargs[typed, `$`]) {.magic: "Echo", noSideEffect,
                                           tags: [], raises: [].}
   ## Same as `echo <#echo,varargs[typed,]>`_, but as a special semantic rule,

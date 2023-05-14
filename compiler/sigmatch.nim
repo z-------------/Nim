@@ -645,6 +645,9 @@ proc procTypeRel(c: var TCandidate, f, a: PType): TTypeRelation =
     elif a[0] != nil:
       return isNone
 
+    if not guardsMatch(f.guard, a.guard):
+      return isNone
+
     result = getProcConvMismatch(c.c.config, f, a, result)[1]
 
     when useEffectSystem:

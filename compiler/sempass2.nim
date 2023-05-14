@@ -115,13 +115,8 @@ proc lockLocations(a: PEffects; pragma: PNode) =
 
 proc guardGlobal(a: PEffects; n: PNode; guard: PSym) =
   # check whether the corresponding lock is held:
-  zecho "guardGlobal: locked = ", a.locked
   for L in a.locked:
-    zecho "guardGlobal: checking L = ", L
-    if L.kind == nkSym and L.sym == guard:
-      zecho "guardGlobal: ok, the corresponding lock is held"
-      return
-  zecho "guardGlobal: not ok!"
+    if L.kind == nkSym and L.sym == guard: return
   # we allow accesses nevertheless in top level statements for
   # easier initialization:
   #if a.isTopLevel:
@@ -828,10 +823,6 @@ proc checkForSink(tracked: PEffects; n: PNode) =
     checkForSink(tracked.config, tracked.c.idgen, tracked.owner, n)
 
 proc trackCall(tracked: PEffects; n: PNode) =
-  let zIsFoo = n != nil and ($n).contains("foo")
-  if zIsFoo:
-    zecho "trackCall: tracked = ", tracked.locked, ", n = ", $n
-
   template gcsafeAndSideeffectCheck() =
     if notGcSafe(op) and not importedFromC(a):
       # and it's not a recursive call:
@@ -859,9 +850,6 @@ proc trackCall(tracked: PEffects; n: PNode) =
     # are indistinguishable from normal procs (both have tyProc type) and
     # we can detect them only by checking for attached nkEffectList.
     if op != nil and op.kind == tyProc and op.n[0].kind == nkEffectList:
-      # if zIsFoo:
-        # zecho "trackCall: this is where we would have checked lock levels?"
-        # zecho "trackCall: a.kind = ", a.kind
       var guard: PSym = nil
       if a.kind == nkSym:
         if a.sym == tracked.owner: tracked.isRecursive = true
@@ -869,7 +857,6 @@ proc trackCall(tracked: PEffects; n: PNode) =
         if sfSideEffect in a.sym.flags: markSideEffect(tracked, a, n.info)
         guard = a.sym.typ.guard
       else:
-        zecho "trackCall: a.kind is not nkSym! n = ", n, ", a = ", a, ", op = ", op
         guard = op.guard
       if guard != nil:
         guardGlobal(tracked, n, guard)
@@ -1468,10 +1455,6 @@ proc hasRealBody(s: PSym): bool =
   result = {sfForward, sfImportc} * s.flags == {}
 
 proc trackProc*(c: PContext; s: PSym, body: PNode) =
-  let zIsFoo = ($s).contains("foo")
-  if zIsFoo:
-    zecho "trackProc: s = ", s, ", body = ", body
-
   let g = c.graph
   when defined(nimsuggest):
     if g.config.expandDone():
@@ -1496,16 +1479,11 @@ proc trackProc*(c: PContext; s: PSym, body: PNode) =
 
   let guard = s.typ.guard
   if guard != nil:
-    zecho "trackProc: adding guard to locked locations"
     let guardNode = newNodeIT(nkSym, guard.info, guard.typ)
     guardNode.sym = guard
     t.locked.add(guardNode)
 
-  if zIsFoo:
-    zecho "trackProc: before calling track, t.locked = ", t.locked
   track(t, body)
-  if zIsFoo:
-    zecho "trackProc: after calling track, t.locked = ", t.locked
 
   if s.kind != skMacro:
     let params = s.typ.n

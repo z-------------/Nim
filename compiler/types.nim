@@ -50,6 +50,7 @@ type
     pcmNotGcSafe
     pcmNotIterator
     pcmDifferentCallConv
+    pcmGuardMismatch
 
 proc typeToString*(typ: PType; prefer: TPreferedDesc = preferName): string
 
@@ -1606,6 +1607,9 @@ proc skipHiddenSubConv*(n: PNode; g: ModuleGraph; idgen: IdGenerator): PNode =
   else:
     result = n
 
+proc guardsMatch*(fg, ag: PSym): bool =
+  ag == nil or fg == ag
+
 proc getProcConvMismatch*(c: ConfigRef, f, a: PType, rel = isNone): (set[ProcConvMismatch], TTypeRelation) =
   ## Returns a set of the reason of mismatch, and the relation for conversion.
   result[1] = rel
@@ -1623,6 +1627,10 @@ proc getProcConvMismatch*(c: ConfigRef, f, a: PType, rel = isNone): (set[ProcCon
   if f.flags * {tfIterator} != a.flags * {tfIterator}:
     # One of them is an iterator so not convertible
     result[0].incl pcmNotIterator
+    result[1] = isNone
+
+  if not guardsMatch(f.guard, a.guard):
+    result[0].incl pcmGuardMismatch
     result[1] = isNone
 
   if f.callConv != a.callConv:
@@ -1652,6 +1660,8 @@ proc addPragmaAndCallConvMismatch*(message: var string, formal, actual: PType, c
     of pcmNotGcSafe:
       expectedPragmas.add "gcsafe, "
     of pcmNotIterator: discard
+    of pcmGuardMismatch:
+      message.add "\n  Guard mismatch: got $1, but expected $2." % [$actual.guard, $formal.guard]
 
   if expectedPragmas.len > 0:
     gotPragmas.setLen(max(0, gotPragmas.len - 2)) # Remove ", "

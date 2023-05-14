@@ -741,28 +741,22 @@ proc deprecatedStmt(c: PContext; outerPragma: PNode) =
     "deprecated statement is now a no-op, use regular deprecated pragma")
 
 proc pragmaGuard(c: PContext; it: PNode; kind: TSymKind): PSym =
-  zecho "pragmaGuard called"
   if it.kind notin nkPragmaCallKinds or it.len != 2:
-    zecho "pragmaGuard: invalid pragma"
     invalidPragma(c, it); return
   let n = it[1]
   if n.kind == nkSym:
-    zecho "pragmaGuard: nkSym"
     result = n.sym
   elif kind == skField:
-    zecho "pragmaGuard: skField"
     # First check if the guard is a global variable:
     result = qualifiedLookUp(c, n, {})
     if result.isNil or result.kind notin {skLet, skVar} or
         sfGlobal notin result.flags:
-      zecho "pragmaGuard: return dummy symbol"
       # We return a dummy symbol; later passes over the type will repair it.
       # Generic instantiation needs to know about this too. But we're lazy
       # and perform the lookup on demand instead.
       result = newSym(skUnknown, considerQuotedIdent(c, n), c.idgen, nil, n.info,
         c.config.options)
   else:
-    zecho "pragmaGuard: else case"
     result = qualifiedLookUp(c, n, {checkUndeclared})
 
 proc semCustomPragma(c: PContext, n: PNode, sym: PSym): PNode =
@@ -1226,18 +1220,13 @@ proc singlePragma(c: PContext, sym: PSym, n: PNode, i: var int,
           if sym.bitsize <= 0:
             localError(c.config, it.info, "bitsize needs to be positive")
       of wGuard:
-        zecho "wGuard: sym kind = ", if sym == nil: "(sym is nil)" else: $sym.kind
         if sym == nil or sym.kind notin {skVar, skLet, skField, skProc}:
-          zecho "wGuard: invalid pragma!"
           invalidPragma(c, it)
         else:
-          zecho "wGuard: call pragmaGuard"
-          zecho "wGuard: sym.kind = ", sym.kind, " (in routineKinds = ", sym.kind in routineKinds, ")"
           let guard = pragmaGuard(c, it, sym.kind)
           case sym.kind
           of skProc: sym.typ.guard = guard
           else: sym.guard = guard
-          zecho "wGuard: after calling pragmaGuard"
       of wGoto:
         if sym == nil or sym.kind notin {skVar, skLet}:
           invalidPragma(c, it)
