@@ -1640,7 +1640,7 @@ proc getProcConvMismatch*(c: ConfigRef, f, a: PType, rel = isNone): (set[ProcCon
       of isInferred: result[1] = isInferredConvertible
       of isBothMetaConvertible: result[1] = isBothMetaConvertible
       elif result[1] != isNone: result[1] = isConvertible
-      else: result[0].incl pcmDifferentCallConv
+      elif pcmGuardMismatch notin result[0]: result[0].incl pcmDifferentCallConv
     else:
       result[1] = isNone
       result[0].incl pcmDifferentCallConv
