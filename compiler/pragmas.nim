@@ -1224,6 +1224,11 @@ proc singlePragma(c: PContext, sym: PSym, n: PNode, i: var int,
           invalidPragma(c, it)
         else:
           let guard = pragmaGuard(c, it, sym.kind)
+          if guard == nil:
+            var msg = "invalid guard expression"
+            if it.len >= 2:
+              msg.add(": " & renderTree(it[1]))
+            localError(c.config, it.info, msg)
           case sym.kind
           of skProc: sym.typ.guard = guard
           else: sym.guard = guard
