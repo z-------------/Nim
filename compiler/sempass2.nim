@@ -127,10 +127,10 @@ proc guardGlobal(a: PEffects; n: PNode; guard: PSym) =
 
 # 'guard*' are checks which are concerned with 'guard' annotations
 # (var x{.guard: y.}: int)
-proc guardDotAccess(a: PEffects; n: PNode) =
+proc guardDotAccess(a: PEffects; n: PNode; isCall: bool) =
   let ri = n[1]
   if ri.kind != nkSym or ri.sym.kind != skField: return
-  var g = ri.sym.guard
+  var g = if isCall: ri.sym.typ.guard else: ri.sym.guard
   if g.isNil or a.isTopLevel: return
   # fixup guard:
   if g.kind == skUnknown:
@@ -859,7 +859,11 @@ proc trackCall(tracked: PEffects; n: PNode) =
       else:
         guard = op.guard
       if guard != nil:
-        guardGlobal(tracked, n, guard)
+        case a.kind
+        of nkDotExpr:
+          guardDotAccess(tracked, a, true)
+        else:
+          guardGlobal(tracked, n, guard)
       var effectList = op.n[0]
       if a.kind == nkSym and a.sym.kind == skMethod:
         if {sfBase, sfThread} * a.sym.flags == {sfBase}:
@@ -1071,7 +1075,7 @@ proc track(tracked: PEffects, n: PNode) =
   of nkCallKinds:
     trackCall(tracked, n)
   of nkDotExpr:
-    guardDotAccess(tracked, n)
+    guardDotAccess(tracked, n, false)
     for i in 0..<n.len: track(tracked, n[i])
   of nkCheckedFieldExpr:
     track(tracked, n[0])

@@ -66,7 +66,7 @@ const
     wNoSideEffect, wSideEffect, wNoreturn, wNosinks, wDynlib, wHeader,
     wThread, wAsmNoStackFrame,
     wRaises, wLocks, wTags, wForbids, wRequires, wEnsures, wEffectsOf,
-    wGcSafe, wCodegenDecl, wNoInit, wCompileTime}
+    wGcSafe, wCodegenDecl, wNoInit, wCompileTime} # XXX add wGuard here for inner procs (proc defined inside proc body)
   typePragmas* = declPragmas + {wMagic, wAcyclic,
     wPure, wHeader, wCompilerProc, wCore, wFinal, wSize, wShallow,
     wIncompleteStruct, wCompleteStruct, wByCopy, wByRef,
@@ -740,13 +740,13 @@ proc deprecatedStmt(c: PContext; outerPragma: PNode) =
   message(c.config, pragma.info, warnDeprecated,
     "deprecated statement is now a no-op, use regular deprecated pragma")
 
-proc pragmaGuard(c: PContext; it: PNode; kind: TSymKind): PSym =
+proc pragmaGuard(c: PContext; it: PNode; kind: TSymKind; owner: PSym): PSym =
   if it.kind notin nkPragmaCallKinds or it.len != 2:
     invalidPragma(c, it); return
   let n = it[1]
   if n.kind == nkSym:
     result = n.sym
-  elif kind == skField:
+  elif kind == skField or owner.kind == skType:
     # First check if the guard is a global variable:
     result = qualifiedLookUp(c, n, {})
     if result.isNil or result.kind notin {skLet, skVar} or
@@ -1223,7 +1223,7 @@ proc singlePragma(c: PContext, sym: PSym, n: PNode, i: var int,
         if sym == nil or sym.kind notin {skVar, skLet, skField, skProc}:
           invalidPragma(c, it)
         else:
-          let guard = pragmaGuard(c, it, sym.kind)
+          let guard = pragmaGuard(c, it, sym.kind, sym.owner)
           if guard == nil:
             var msg = "invalid guard expression"
             if it.len >= 2:
