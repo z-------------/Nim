@@ -1,5 +1,5 @@
 discard """
-  cmd: "nim $target --hintAsError:ExceptTooBroad:on -d:testing $options $file"
+  cmd: "nim $target --hintAsError:ExceptTooBroad:on --hintAsError:ExceptRedundant:on -d:testing $options $file"
 """
 type
   CommonError = object of CatchableError

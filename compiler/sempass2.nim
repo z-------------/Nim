@@ -473,10 +473,14 @@ proc listEffects(a: PEffects) =
   for e in items(a.forbids): message(a.config, e.info, hintUser, typeToString(e.typ))
 
 proc catches(tracked: PEffects, eNode: PNode) =
-  let e = skipTypes(eNode.typ, skipPtrs)
-  var L = tracked.exc.len
-  var i = tracked.bottom
-  var common: PType = nil
+  let
+    e = skipTypes(eNode.typ, skipPtrs)
+    initialL = tracked.exc.len
+  var
+    L = initialL
+    i = tracked.bottom
+    common: PType = nil
+    catchesSubclass = false
   while i < L:
     # r supertype of e?
     let r = tracked.graph.excType(tracked.exc[i])
@@ -488,10 +492,15 @@ proc catches(tracked: PEffects, eNode: PNode) =
       tracked.exc[i] = tracked.exc[L-1]
       dec L
     else:
+      if diff > 0:
+        catchesSubclass = true
       inc i
   if common != nil and not sameObjectTypes(common, e):
     message(tracked.config, eNode.info, hintExceptTooBroad,
             "Only $1 is raised here which is more specific" % common.sym.name.s)
+  if L == initialL:
+    message(tracked.config, eNode.info, hintExceptRedundant,
+            "$1 $2 not catch anything here" % [e.sym.name.s, if catchesSubclass: "might" else: "does"])
   if tracked.exc.len > 0:
     setLen(tracked.exc.sons, L)
   else:

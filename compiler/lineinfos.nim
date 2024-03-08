@@ -112,6 +112,7 @@ type
     hintDeclaredLoc = "DeclaredLoc", # since 1.5.1
     hintUnknownHint = "UnknownHint"
     hintExceptTooBroad = "ExceptTooBroad"
+    hintExceptRedundant = "ExceptRedundant"
 
 const
   MsgKindToStr*: array[TMsgKind, string] = [
@@ -238,6 +239,7 @@ const
     hintDeclaredLoc: "$1",
     hintUnknownHint: "unknown hint: $1",
     hintExceptTooBroad: "$1",
+    hintExceptRedundant: "$1",
   ]
 
 const
