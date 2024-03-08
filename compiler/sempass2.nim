@@ -472,13 +472,18 @@ proc listEffects(a: PEffects) =
   for e in items(a.tags): message(a.config, e.info, hintUser, typeToString(e.typ))
   for e in items(a.forbids): message(a.config, e.info, hintUser, typeToString(e.typ))
 
-proc catches(tracked: PEffects, e: PType) =
-  let e = skipTypes(e, skipPtrs)
+proc catches(tracked: PEffects, eNode: PNode) =
+  let e = skipTypes(eNode.typ, skipPtrs)
   var L = tracked.exc.len
   var i = tracked.bottom
   while i < L:
     # r supertype of e?
-    if safeInheritanceDiff(tracked.graph.excType(tracked.exc[i]), e) <= 0:
+    let r = tracked.graph.excType(tracked.exc[i])
+    let diff = safeInheritanceDiff(r, e)
+    if diff <= 0:
+      if diff < 0:
+        message(tracked.config, eNode.info, hintExceptTooBroad,
+                "Only $1 is raised here which is more specific" % r.sym.name.s)
       tracked.exc[i] = tracked.exc[L-1]
       dec L
     else:
@@ -521,11 +526,11 @@ proc trackTryStmt(tracked: PEffects, n: PNode) =
         for j in 0..<b.len - 1:
           if b[j].isInfixAs():
             assert(b[j][1].kind == nkType)
-            catches(tracked, b[j][1].typ)
+            catches(tracked, b[j][1])
             createTypeBoundOps(tracked, b[j][2].typ, b[j][2].info)
           else:
             assert(b[j].kind == nkType)
-            catches(tracked, b[j].typ)
+            catches(tracked, b[j])
     else:
       assert b.kind == nkFinally
   # Add any other exception raised in the except bodies
