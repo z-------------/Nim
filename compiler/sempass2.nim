@@ -498,7 +498,7 @@ proc catches(tracked: PEffects, eNode: PNode) =
   if common != nil and not sameObjectTypes(common, e):
     message(tracked.config, eNode.info, hintExceptTooBroad,
             "Only $1 is raised here which is more specific" % common.sym.name.s)
-  if L == initialL:
+  if L == initialL and not isDefectException(e):
     message(tracked.config, eNode.info, hintExceptRedundant,
             "$1 $2 not catch anything here" % [e.sym.name.s, if catchesSubclass: "might" else: "does"])
   if tracked.exc.len > 0:
