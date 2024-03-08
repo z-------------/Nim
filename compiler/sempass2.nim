@@ -476,18 +476,22 @@ proc catches(tracked: PEffects, eNode: PNode) =
   let e = skipTypes(eNode.typ, skipPtrs)
   var L = tracked.exc.len
   var i = tracked.bottom
+  var common: PType = nil
   while i < L:
     # r supertype of e?
     let r = tracked.graph.excType(tracked.exc[i])
     let diff = safeInheritanceDiff(r, e)
     if diff <= 0:
-      if diff < 0:
-        message(tracked.config, eNode.info, hintExceptTooBroad,
-                "Only $1 is raised here which is more specific" % r.sym.name.s)
+      if tracked.config.hasHint(hintExceptTooBroad):
+        if common == nil: common = r
+        else: common = commonSuperclass(common, r) # TODO can we reuse the computation in safeInheritanceDiff?
       tracked.exc[i] = tracked.exc[L-1]
       dec L
     else:
       inc i
+  if common != nil and not sameObjectTypes(common, e):
+    message(tracked.config, eNode.info, hintExceptTooBroad,
+            "Only $1 is raised here which is more specific" % common.sym.name.s)
   if tracked.exc.len > 0:
     setLen(tracked.exc.sons, L)
   else:
