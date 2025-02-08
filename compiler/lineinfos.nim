@@ -113,6 +113,7 @@ type
     hintMsgOrigin = "MsgOrigin", # since 1.3.5
     hintDeclaredLoc = "DeclaredLoc", # since 1.5.1
     hintExceptTooBroad = "ExceptTooBroad"
+    hintExceptRedundant = "ExceptRedundant"
 
 const
   MsgKindToStr*: array[TMsgKind, string] = [
@@ -240,6 +241,7 @@ const
     hintMsgOrigin: "$1",
     hintDeclaredLoc: "$1",
     hintExceptTooBroad: "$1",
+    hintExceptRedundant: "$1",
   ]
 
 const
